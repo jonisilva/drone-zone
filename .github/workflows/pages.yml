@@ -1,0 +1,48 @@
+name: Deploy to GitHub Pages
+
+# Publishes the app and refreshes ANAC's zone data (NOTAMs change daily).
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 5,17 * * *" # 05:17 and 17:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Refresh zone data from ANAC
+        # If ANAC is unreachable, keep the committed copy (the app shows its age).
+        run: python update_zones.py || echo "::warning::ANAC download failed; deploying the committed data/zones.geojson"
+
+      - name: Assemble site
+        run: |
+          mkdir _site
+          cp -r index.html app.js style.css sw.js manifest.webmanifest icons data _site/
+          touch _site/.nojekyll
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

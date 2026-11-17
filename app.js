@@ -1,0 +1,402 @@
+/* Zonas Drone — unofficial viewer for ANAC's UAS geozones (ED-318 export). */
+(() => {
+  "use strict";
+
+  const TYPES = ["NO_RESTRICTION", "CONDITIONAL", "REQ_AUTHORIZATION", "PROHIBITED"]; // least → most restrictive
+  const COLORS = { PROHIBITED: "#d7263d", REQ_AUTHORIZATION: "#f2a900", CONDITIONAL: "#2d7dd2", NO_RESTRICTION: "#8a94a3" };
+  const UPCOMING_DAYS = 7;
+  const OFFICIAL = "https://dnt.anac.pt/";
+
+  const I18N = {
+    pt: {
+      subtitle: "Zonas geográficas UAS em Portugal",
+      disclaimer: "App não oficial. Os dados vêm da ANAC mas podem estar desatualizados — confirme sempre na fonte oficial antes de voar.",
+      rules: "Regras", searchPh: "Procurar zona (nome ou ID)…", myLocation: "A minha localização",
+      canIFly: "Posso voar aqui?", when: "Data e hora do voo", now: "Agora", layers: "Camadas",
+      t_PROHIBITED: "Proibido", t_REQ_AUTHORIZATION: "Requer autorização", t_CONDITIONAL: "Condicionado", t_NO_RESTRICTION: "Informativo",
+      upcoming: `NOTAM / zonas futuras (${UPCOMING_DAYS} dias)`,
+      rulesTitle: "Antes de voar", close: "Fechar",
+      v_PROHIBITED: "Não — voo proibido", v_PROHIBITED_d: "Este ponto está numa zona proibida na categoria aberta à hora escolhida.",
+      v_REQ_AUTHORIZATION: "Só com autorização", v_REQ_AUTHORIZATION_d: "É necessária autorização prévia da entidade indicada na zona.",
+      v_CONDITIONAL: "Condições aplicam-se", v_CONDITIONAL_d: "Leia as condições da zona antes de voar.",
+      v_NO_RESTRICTION: "Zona informativa", v_NO_RESTRICTION_d: "Sem restrição específica, mas leia a mensagem da zona.",
+      v_NONE: "Nenhuma zona geográfica neste ponto", v_NONE_d: "Os dados não mostram zonas aqui à hora escolhida. As regras gerais da categoria aberta continuam a aplicar-se.",
+      futureHdr: "Atenção: zonas que ficam ativas nos próximos dias",
+      height: "Altura", contact: "Contacto", notam: "Texto NOTAM", validity: "Validade", from: "de", to: "a",
+      zonesHere: "zonas neste ponto", fetched: "Dados obtidos", issued: "emitidos pela ANAC", source: "Fonte oficial",
+      stale: "Os dados têm mais de 24 h. Atualize com update_zones.py.", noGeo: "Não foi possível obter a localização.",
+      loadErr: "Não foi possível carregar data/zones.geojson. Corra update_zones.py e sirva a pasta por HTTP.",
+      checkedAt: "Ponto verificado", offline: "Offline", install: "Instalar",
+      iosHint: "No Safari, toque em Partilhar e depois em \"Adicionar ao ecrã principal\".",
+      offlineData: "Sem ligação: a mostrar a última cópia guardada dos dados. NOTAM recentes podem faltar.", reasons: { NATURE: "Natureza", AIR_TRAFFIC: "Tráfego aéreo", EMERGENCY: "Emergência", SENSITIVE: "Sensível", OTHER: "Outro" },
+      rulesHtml: `<ul>
+        <li>Na categoria aberta, a altura máxima é de 120 m acima do solo, mesmo fora de zonas geográficas.</li>
+        <li>Mantenha o drone sempre à vista (VLOS).</li>
+        <li>Não sobrevoe aglomerações de pessoas.</li>
+        <li>O registo de operador e a formação aplicam-se conforme o peso e a classe do drone — veja as regras na ANAC.</li>
+        <li>Zonas temporárias (NOTAM) mudam todos os dias: verifique perto da hora do voo.</li>
+        <li>Fotografia/vídeo aéreo pode exigir autorização da AAN.</li>
+      </ul><p>Fontes oficiais: <a href="${OFFICIAL}" target="_blank" rel="noopener">mapa ANAC</a> · <a href="https://www.anac.pt/" target="_blank" rel="noopener">anac.pt</a> · <a href="https://aan.pt/" target="_blank" rel="noopener">aan.pt</a></p>`,
+    },
+    en: {
+      subtitle: "UAS geographical zones in Portugal",
+      disclaimer: "Unofficial app. Data comes from ANAC but may be out of date — always confirm with the official source before flying.",
+      rules: "Rules", searchPh: "Search zone (name or ID)…", myLocation: "My location",
+      canIFly: "Can I fly here?", when: "Flight date and time", now: "Now", layers: "Layers",
+      t_PROHIBITED: "Prohibited", t_REQ_AUTHORIZATION: "Authorisation required", t_CONDITIONAL: "Conditional", t_NO_RESTRICTION: "Information",
+      upcoming: `NOTAM / upcoming zones (${UPCOMING_DAYS} days)`,
+      rulesTitle: "Before you fly", close: "Close",
+      v_PROHIBITED: "No — flight prohibited", v_PROHIBITED_d: "This point is in a zone where open-category flights are prohibited at the chosen time.",
+      v_REQ_AUTHORIZATION: "Only with authorisation", v_REQ_AUTHORIZATION_d: "Prior authorisation from the authority listed for the zone is required.",
+      v_CONDITIONAL: "Conditions apply", v_CONDITIONAL_d: "Read the zone's conditions before flying.",
+      v_NO_RESTRICTION: "Information zone", v_NO_RESTRICTION_d: "No specific restriction, but read the zone message.",
+      v_NONE: "No geographical zone at this point", v_NONE_d: "The data shows no zones here at the chosen time. General open-category rules still apply.",
+      futureHdr: "Heads up: zones becoming active in the next days",
+      height: "Height", contact: "Contact", notam: "NOTAM text", validity: "Validity", from: "from", to: "to",
+      zonesHere: "zones at this point", fetched: "Data fetched", issued: "issued by ANAC", source: "Official source",
+      stale: "Data is more than 24 h old. Refresh with update_zones.py.", noGeo: "Could not get your location.",
+      loadErr: "Could not load data/zones.geojson. Run update_zones.py and serve the folder over HTTP.",
+      checkedAt: "Checked point", offline: "Offline", install: "Install",
+      iosHint: "In Safari, tap Share and then \"Add to Home Screen\".",
+      offlineData: "No connection: showing the last saved copy of the data. Recent NOTAMs may be missing.", reasons: { NATURE: "Nature", AIR_TRAFFIC: "Air traffic", EMERGENCY: "Emergency", SENSITIVE: "Sensitive", OTHER: "Other" },
+      rulesHtml: `<ul>
+        <li>In the open category the maximum height is 120 m above ground, even outside geographical zones.</li>
+        <li>Keep the drone in visual line of sight (VLOS) at all times.</li>
+        <li>Do not fly over assemblies of people.</li>
+        <li>Operator registration and pilot training apply depending on the drone's weight and class — check ANAC's rules.</li>
+        <li>Temporary zones (NOTAMs) change daily: check close to flight time.</li>
+        <li>Aerial photography/video may need authorisation from the AAN.</li>
+      </ul><p>Official sources: <a href="${OFFICIAL}" target="_blank" rel="noopener">ANAC map</a> · <a href="https://www.anac.pt/" target="_blank" rel="noopener">anac.pt</a> · <a href="https://aan.pt/" target="_blank" rel="noopener">aan.pt</a></p>`,
+    },
+  };
+
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch { /* ignore */ } },
+  };
+
+  let lang = store.get("lang") === "en" ? "en" : "pt";
+  const t = (k) => I18N[lang][k] ?? k;
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  let data = null;          // raw FeatureCollection
+  let zones = [];           // features with precomputed bbox + parsed windows
+  let lastCheck = null;     // [lng, lat] of last "can I fly" check
+  const hidden = new Set();
+
+  /* ---------- time ---------- */
+  const whenInput = $("#when");
+  const toLocalInput = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  const setNow = () => { whenInput.value = toLocalInput(new Date()); };
+  const chosenTime = () => (whenInput.value ? new Date(whenInput.value).getTime() : Date.now());
+
+  function activeAt(z, ts) {
+    if (!z.win.length) return true;
+    return z.win.some(([a, b]) => ts >= a && ts <= b);
+  }
+  function upcomingFrom(z, ts) {
+    const until = ts + UPCOMING_DAYS * 864e5;
+    return !activeAt(z, ts) && z.win.some(([a]) => a > ts && a <= until);
+  }
+
+  /* ---------- geometry ---------- */
+  function bboxOf(geom) {
+    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+    const polys = geom.type === "Polygon" ? [geom.coordinates] : geom.coordinates;
+    for (const p of polys) for (const [x, y] of p[0]) {
+      if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y;
+    }
+    return [x0, y0, x1, y1];
+  }
+  function inRing(pt, ring) {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i], [xj, yj] = ring[j];
+      if ((yi > pt[1]) !== (yj > pt[1]) && pt[0] < ((xj - xi) * (pt[1] - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+  function contains(z, pt) {
+    const b = z.bbox;
+    if (pt[0] < b[0] || pt[0] > b[2] || pt[1] < b[1] || pt[1] > b[3]) return false;
+    const polys = z.f.geometry.type === "Polygon" ? [z.f.geometry.coordinates] : z.f.geometry.coordinates;
+    return polys.some((p) => inRing(pt, p[0]) && !p.slice(1).some((h) => inRing(pt, h)));
+  }
+
+  /* ---------- map ---------- */
+  // Zone layers live in the initial style (empty data), so they exist even when
+  // tiles can't load offline; the data is swapped in with setData once fetched.
+  const colorExpr = ["match", ["get", "type"], ...Object.entries(COLORS).flat(), "#888"];
+  const isState = (s) => ["==", ["get", "state"], s];
+  const zoneLayers = [
+    { id: "zones-fill", type: "fill", source: "zones", filter: isState("active"),
+      layout: { "fill-sort-key": ["get", "rank"] },
+      paint: { "fill-color": colorExpr, "fill-opacity": ["case", ["==", ["get", "type"], "NO_RESTRICTION"], 0.15, 0.3] } },
+    { id: "zones-line", type: "line", source: "zones", filter: isState("active"),
+      layout: { "line-sort-key": ["get", "rank"] },
+      paint: { "line-color": colorExpr, "line-width": 1.4 } },
+    { id: "zones-upcoming-fill", type: "fill", source: "zones", filter: isState("upcoming"),
+      paint: { "fill-color": "#9b51e0", "fill-opacity": 0.08 } },
+    { id: "zones-upcoming", type: "line", source: "zones", filter: isState("upcoming"),
+      paint: { "line-color": "#9b51e0", "line-width": 2, "line-dasharray": [2, 2] } },
+  ];
+  const map = new maplibregl.Map({
+    container: "map",
+    center: [-8.2, 39.6],
+    zoom: 6,
+    hash: true,
+    attributionControl: { compact: true },
+    style: {
+      version: 8,
+      sources: {
+        osm: {
+          type: "raster", tileSize: 256,
+          tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · Zonas: <a href="https://dnt.anac.pt/">ANAC</a>',
+          maxzoom: 19,
+        },
+        zones: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+      },
+      layers: [{ id: "osm", type: "raster", source: "osm" }, ...zoneLayers],
+    },
+  });
+  window.zonasDroneMap = map; // handy for debugging in the console
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+  map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
+
+  function buildRenderData() {
+    const ts = chosenTime();
+    const showUp = $("#showUpcoming").checked;
+    const counts = {};
+    const feats = [];
+    for (const z of zones) {
+      const type = z.f.properties.type;
+      const active = activeAt(z, ts);
+      const upcoming = !active && upcomingFrom(z, ts);
+      if (active) counts[type] = (counts[type] || 0) + 1;
+      if (hidden.has(type)) continue;
+      if (!active && !(showUp && upcoming)) continue;
+      feats.push({
+        type: "Feature",
+        id: z.idx,
+        geometry: z.f.geometry,
+        properties: { idx: z.idx, type, rank: TYPES.indexOf(type), state: active ? "active" : "upcoming" },
+      });
+    }
+    document.querySelectorAll("[data-count]").forEach((el) => { el.textContent = counts[el.dataset.count] || 0; });
+    return { type: "FeatureCollection", features: feats };
+  }
+
+  function refreshMap() {
+    const src = map.getSource("zones");
+    if (src) src.setData(buildRenderData());
+    if (lastCheck) checkPoint(lastCheck, false);
+  }
+
+  map.on("click", (e) => checkPoint([e.lngLat.lng, e.lngLat.lat], true, e.lngLat));
+  for (const id of ["zones-fill", "zones-upcoming-fill"]) {
+    map.on("mouseenter", id, () => { map.getCanvas().style.cursor = "pointer"; });
+    map.on("mouseleave", id, () => { map.getCanvas().style.cursor = ""; });
+  }
+
+  /* ---------- zone cards & verdict ---------- */
+  const fmtDate = (ms) => new Date(ms).toLocaleString(lang === "pt" ? "pt-PT" : "en-GB", { dateStyle: "medium", timeStyle: "short" });
+
+  function zoneCard(z, future) {
+    const p = z.f.properties;
+    const name = p.name[lang] || p.name.pt;
+    const reasons = p.reason.map((r) => I18N[lang].reasons[r] || r).join(", ");
+    const height = p.upper != null ? `${p.lower ?? 0}–${p.upper} m ${p.upperRef}` : "";
+    const ts = chosenTime();
+    const win = z.win.filter(([, b]) => b >= ts).slice(0, 3)
+      .map(([a, b]) => `${t("from")} ${fmtDate(a)} ${t("to")} ${fmtDate(b)}`).join("<br>");
+    const auth = p.authorities.map((a) => {
+      const bits = [esc(a.name[lang] || a.name.pt)];
+      if (a.email) bits.push(`<a href="mailto:${esc(a.email)}">${esc(a.email)}</a>`);
+      if (a.phone) bits.push(`<a href="tel:+${esc(a.phone)}">+${esc(a.phone)}</a>`);
+      if (a.site) bits.push(`<a href="${esc(a.site)}" target="_blank" rel="noopener">${esc(a.site)}</a>`);
+      return bits.join(" · ");
+    }).join("<br>");
+    return `<div class="zone ${esc(p.type)}${future ? " future" : ""}">
+      <div class="zn">${esc(name)}</div>
+      <div class="zt">${esc(t("t_" + p.type))} · ${esc(p.id)}${reasons ? " · " + esc(reasons) : ""}${height ? " · " + esc(height) : ""}</div>
+      <p>${esc(p.message[lang] || p.message.pt)}</p>
+      <details><summary>${esc(t("validity"))} / ${esc(t("contact"))}</summary>
+        ${win ? `<p>${win}</p>` : ""}
+        ${auth ? `<p>${auth}</p>` : ""}
+        ${p.notam ? `<p><b>${esc(t("notam"))}</b></p><pre>${esc(p.notam)}</pre>` : ""}
+      </details>
+    </div>`;
+  }
+
+  let popup = null;
+  function checkPoint(pt, fresh, lngLat) {
+    if (!zones.length) return;
+    lastCheck = pt;
+    const ts = chosenTime();
+    const here = zones.filter((z) => contains(z, pt));
+    const active = here.filter((z) => activeAt(z, ts))
+      .sort((a, b) => TYPES.indexOf(b.f.properties.type) - TYPES.indexOf(a.f.properties.type));
+    const future = here.filter((z) => upcomingFrom(z, ts));
+    const worst = active[0]?.f.properties.type || "NONE";
+    const cls = { PROHIBITED: "no", REQ_AUTHORIZATION: "no", CONDITIONAL: "caution", NO_RESTRICTION: "caution", NONE: "ok" }[worst];
+    const finalCls = worst === "NONE" && future.length ? "caution" : cls;
+
+    const v = $("#verdict");
+    v.className = "verdict " + finalCls;
+    v.hidden = false;
+    v.innerHTML = `
+      <h3>${esc(t("v_" + worst))}</h3>
+      <p>${esc(t("v_" + worst + "_d"))}</p>
+      <p class="zt">${esc(t("checkedAt"))}: ${pt[1].toFixed(5)}, ${pt[0].toFixed(5)} · ${esc(fmtDate(ts))}</p>
+      <div class="zone-list">${active.map((z) => zoneCard(z, false)).join("")}</div>
+      ${future.length ? `<p><b>${esc(t("futureHdr"))}</b></p><div class="zone-list">${future.map((z) => zoneCard(z, true)).join("")}</div>` : ""}`;
+
+    if (fresh) {
+      if (popup) popup.remove();
+      popup = new maplibregl.Popup({ closeButton: true, maxWidth: "280px" })
+        .setLngLat(lngLat || pt)
+        .setHTML(`<b>${esc(t("v_" + worst))}</b><br><span class="zt">${active.length} ${esc(t("zonesHere"))}</span>`)
+        .addTo(map);
+      if (window.matchMedia("(max-width: 760px)").matches) $("#panel").scrollTop = 0;
+    }
+  }
+
+  /* ---------- search ---------- */
+  const results = $("#results");
+  $("#search").addEventListener("input", (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    if (q.length < 2) { results.hidden = true; return; }
+    const hits = zones.filter((z) => {
+      const p = z.f.properties;
+      return p.name.pt.toLowerCase().includes(q) || p.name.en.toLowerCase().includes(q) || String(p.id).toLowerCase().includes(q);
+    }).slice(0, 20);
+    results.innerHTML = hits.map((z) => {
+      const p = z.f.properties;
+      return `<li tabindex="0" data-idx="${z.idx}"><span class="sw" style="background:${COLORS[p.type]}"></span>${esc(p.name[lang] || p.name.pt)} <span class="zt">${esc(p.id)}</span></li>`;
+    }).join("");
+    results.hidden = !hits.length;
+  });
+  const pick = (li) => {
+    const z = zones[+li.dataset.idx];
+    const [x0, y0, x1, y1] = z.bbox;
+    map.fitBounds([[x0, y0], [x1, y1]], { padding: 60, maxZoom: 14 });
+    results.hidden = true;
+    const c = [(x0 + x1) / 2, (y0 + y1) / 2];
+    checkPoint(contains(z, c) ? c : z.f.geometry.type === "Polygon" ? z.f.geometry.coordinates[0][0] : z.f.geometry.coordinates[0][0][0], true);
+  };
+  results.addEventListener("click", (e) => { const li = e.target.closest("li"); if (li) pick(li); });
+  results.addEventListener("keydown", (e) => { if (e.key === "Enter") { const li = e.target.closest("li"); if (li) pick(li); } });
+
+  /* ---------- controls ---------- */
+  $("#checkBtn").addEventListener("click", () => {
+    const c = map.getCenter();
+    checkPoint([c.lng, c.lat], true, c);
+  });
+  $("#locateBtn").addEventListener("click", () => {
+    if (!navigator.geolocation) { alert(t("noGeo")); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const pt = [pos.coords.longitude, pos.coords.latitude];
+        map.flyTo({ center: pt, zoom: 13 });
+        checkPoint(pt, true);
+      },
+      () => alert(t("noGeo")),
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  });
+  whenInput.addEventListener("change", refreshMap);
+  $("#nowBtn").addEventListener("click", () => { setNow(); refreshMap(); });
+  $("#showUpcoming").addEventListener("change", refreshMap);
+  document.querySelectorAll(".legend input[data-type]").forEach((cb) => {
+    cb.addEventListener("change", () => {
+      cb.checked ? hidden.delete(cb.dataset.type) : hidden.add(cb.dataset.type);
+      refreshMap();
+    });
+  });
+  $("#infoBtn").addEventListener("click", () => { $("#rulesBody").innerHTML = t("rulesHtml"); $("#rulesDlg").showModal(); });
+  $("#langBtn").addEventListener("click", () => {
+    lang = lang === "pt" ? "en" : "pt";
+    store.set("lang", lang);
+    applyLang();
+    if (lastCheck) checkPoint(lastCheck, false);
+  });
+
+  function applyLang() {
+    document.documentElement.lang = lang;
+    $("#langBtn").textContent = lang === "pt" ? "EN" : "PT";
+    document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
+    document.querySelectorAll("[data-i18n-ph]").forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
+    document.querySelectorAll("[data-i18n-title]").forEach((el) => { el.title = t(el.dataset.i18nTitle); });
+    renderMeta();
+  }
+
+  function renderMeta() {
+    if (!data) return;
+    const m = data.metadata || {};
+    const fetched = m.fetched ? Date.parse(m.fetched) : null;
+    const stale = fetched && Date.now() - fetched > 864e5;
+    $("#meta").innerHTML = `${esc(t("fetched"))}: ${fetched ? esc(fmtDate(fetched)) : "?"}${m.issued ? ` (${esc(t("issued"))} ${esc(fmtDate(Date.parse(m.issued)))})` : ""}.
+      ${stale ? `<br><b>${esc(t("stale"))}</b>` : ""}
+      ${fromCache ? `<br><b>${esc(t("offlineData"))}</b>` : ""}
+      <br>${esc(t("source"))}: <a href="${OFFICIAL}" target="_blank" rel="noopener">dnt.anac.pt</a>`;
+  }
+
+  /* ---------- PWA: service worker, install, offline ---------- */
+  let fromCache = false;
+  if ("serviceWorker" in navigator && window.isSecureContext) {
+    window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  }
+
+  const installBtn = $("#installBtn");
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  let deferredPrompt = null;
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    installBtn.hidden = false;
+  });
+  window.addEventListener("appinstalled", () => { installBtn.hidden = true; deferredPrompt = null; });
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+  if (isIOS && !standalone) installBtn.hidden = false;
+  installBtn.addEventListener("click", async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      installBtn.hidden = true;
+    } else if (isIOS) {
+      $("#iosDlg").showModal();
+    }
+  });
+
+  const updateOnline = () => { $("#offlineBadge").hidden = navigator.onLine; };
+  window.addEventListener("online", updateOnline);
+  window.addEventListener("offline", updateOnline);
+  updateOnline();
+
+  /* ---------- boot ---------- */
+  setNow();
+  applyLang();
+
+  const loaded = fetch("data/zones.geojson", { cache: "no-cache" })
+    .then((r) => { if (!r.ok) throw new Error(r.status); fromCache = r.headers.get("X-From-Cache") === "1"; return r.json(); })
+    .then((json) => {
+      data = json;
+      zones = json.features.map((f, idx) => ({
+        idx, f, bbox: bboxOf(f.geometry),
+        win: f.properties.windows.map(([a, b]) => [Date.parse(a), Date.parse(b)]).filter(([a, b]) => !isNaN(a) && !isNaN(b)),
+      }));
+      renderMeta();
+    })
+    .catch(() => { $("#meta").textContent = t("loadErr"); });
+
+  // Don't wait for "load": offline it waits on tiles that never arrive. The zones
+  // source is part of the initial style, so poll until the style has parsed it.
+  loaded.then(() => {
+    if (!zones.length) return;
+    const fill = () => (map.getSource("zones") ? refreshMap() : setTimeout(fill, 100));
+    fill();
+  });
+})();

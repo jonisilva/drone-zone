@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Zonas Drone</title>
+  <meta name="theme-color" content="#0f1b2d">
+  <meta name="description" content="Zonas geográficas UAS em Portugal — posso voar o meu drone aqui? (não oficial)">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Zonas Drone">
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="bar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">✈</span>
+      <div>
+        <h1>Zonas Drone</h1>
+        <p class="sub" data-i18n="subtitle">Zonas geográficas UAS em Portugal</p>
+      </div>
+    </div>
+    <div class="bar-actions">
+      <span id="offlineBadge" class="badge" hidden data-i18n="offline">Offline</span>
+      <button id="installBtn" class="chip install" type="button" hidden data-i18n="install">Instalar</button>
+      <button id="langBtn" class="chip" type="button" aria-label="Language">EN</button>
+      <button id="infoBtn" class="chip" type="button" data-i18n="rules">Regras</button>
+    </div>
+  </header>
+
+  <div class="warn" id="warn" data-i18n="disclaimer">
+    App não oficial. Confirme sempre na fonte oficial da ANAC antes de voar.
+  </div>
+
+  <main class="layout">
+    <section class="map-wrap">
+      <div id="map" aria-label="Mapa"></div>
+      <div class="crosshair" aria-hidden="true"></div>
+
+      <div class="search">
+        <input id="search" type="search" autocomplete="off" data-i18n-ph="searchPh" placeholder="Procurar zona…">
+        <ul id="results" class="results" hidden></ul>
+      </div>
+
+      <div class="fab-col">
+        <button id="locateBtn" class="fab" type="button" data-i18n-title="myLocation" title="A minha localização">◎</button>
+      </div>
+
+      <button id="checkBtn" class="check-btn" type="button" data-i18n="canIFly">Posso voar aqui?</button>
+    </section>
+
+    <aside class="panel" id="panel">
+      <div class="panel-handle" aria-hidden="true"></div>
+
+      <div class="when">
+        <label for="when" data-i18n="when">Data e hora do voo</label>
+        <div class="when-row">
+          <input id="when" type="datetime-local">
+          <button id="nowBtn" class="chip" type="button" data-i18n="now">Agora</button>
+        </div>
+      </div>
+
+      <div id="verdict" class="verdict" hidden></div>
+
+      <div class="legend">
+        <h2 data-i18n="layers">Camadas</h2>
+        <label class="lg"><input type="checkbox" data-type="PROHIBITED" checked><span class="sw prohibited"></span><span data-i18n="t_PROHIBITED">Proibido</span><b data-count="PROHIBITED"></b></label>
+        <label class="lg"><input type="checkbox" data-type="REQ_AUTHORIZATION" checked><span class="sw auth"></span><span data-i18n="t_REQ_AUTHORIZATION">Requer autorização</span><b data-count="REQ_AUTHORIZATION"></b></label>
+        <label class="lg"><input type="checkbox" data-type="CONDITIONAL" checked><span class="sw cond"></span><span data-i18n="t_CONDITIONAL">Condicionado</span><b data-count="CONDITIONAL"></b></label>
+        <label class="lg"><input type="checkbox" data-type="NO_RESTRICTION" checked><span class="sw info"></span><span data-i18n="t_NO_RESTRICTION">Informativo</span><b data-count="NO_RESTRICTION"></b></label>
+        <label class="lg upcoming"><input type="checkbox" id="showUpcoming"><span class="sw upc"></span><span data-i18n="upcoming">NOTAM / zonas futuras (7 dias)</span></label>
+      </div>
+
+      <p class="meta" id="meta"></p>
+    </aside>
+  </main>
+
+  <dialog id="rulesDlg">
+    <form method="dialog">
+      <h2 data-i18n="rulesTitle">Antes de voar</h2>
+      <div id="rulesBody"></div>
+      <button class="chip" value="close" data-i18n="close">Fechar</button>
+    </form>
+  </dialog>
+
+  <dialog id="iosDlg">
+    <form method="dialog">
+      <h2 data-i18n="install">Instalar</h2>
+      <p data-i18n="iosHint">No Safari, toque em Partilhar e depois em "Adicionar ao ecrã principal".</p>
+      <button class="chip" value="close" data-i18n="close">Fechar</button>
+    </form>
+  </dialog>
+
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
