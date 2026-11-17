@@ -103,7 +103,7 @@ def convert(feature):
 
 
 def main():
-    req = urllib.request.Request(SOURCE_URL, headers={"User-Agent": "zonas-drone-updater/1.0"})
+    req = urllib.request.Request(SOURCE_URL, headers={"User-Agent": "drone-zone-updater/1.0"})
     with urllib.request.urlopen(req, timeout=60) as resp:
         raw = json.load(resp)
 

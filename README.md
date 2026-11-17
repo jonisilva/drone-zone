@@ -1,11 +1,11 @@
-# Zonas Drone
+# Drone Zone
 
 Unofficial web app for checking UAS (drone) geographical zones in Portugal,
 built on the open data ANAC publishes at <https://dnt.anac.pt/> (ED-318 export:
 static zones plus NOTAMs). It is not affiliated with ANAC. Always confirm on
 the official map before flying.
 
-**Live app:** <https://jonisilva.github.io/zonas-drone/>. It is deployed by
+**Live app:** <https://jonisilva.github.io/drone-zone/>. It is deployed by
 `.github/workflows/pages.yml` on every push and twice a day (05:17 and
 17:17 UTC), and each deploy fetches fresh ANAC data. If ANAC can't be
 reached, the deploy uses the committed `data/zones.geojson`.

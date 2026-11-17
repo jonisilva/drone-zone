@@ -1,4 +1,4 @@
-/* Zonas Drone — unofficial viewer for ANAC's UAS geozones (ED-318 export). */
+/* Drone Zone — unofficial viewer for ANAC's UAS geozones (ED-318 export). */
 (() => {
   "use strict";
 
@@ -161,7 +161,7 @@
       layers: [{ id: "osm", type: "raster", source: "osm" }, ...zoneLayers],
     },
   });
-  window.zonasDroneMap = map; // handy for debugging in the console
+  window.droneZoneMap = map; // handy for debugging in the console
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
   map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 

@@ -1,6 +1,6 @@
 {
-  "name": "Zonas Drone — Portugal",
-  "short_name": "Zonas Drone",
+  "name": "Drone Zone — Portugal",
+  "short_name": "Drone Zone",
   "description": "Unofficial viewer of ANAC's UAS geographical zones in Portugal: can I fly my drone here?",
   "lang": "pt-PT",
   "start_url": "./",
