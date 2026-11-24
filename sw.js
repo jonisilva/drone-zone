@@ -1,5 +1,5 @@
 /* Service worker: offline app shell, last-known zone data, and viewed map tiles. */
-const VERSION = "v5"; // bump on every release so phones pick up new files
+const VERSION = "v6"; // bump on every release so phones pick up new files
 const SHELL = `zd-shell-${VERSION}`;
 const DATA = "zd-data";
 const TILES = "zd-tiles";

@@ -30,6 +30,7 @@
       geoDenied: "Localização bloqueada. Permita a localização para este site (ícone ao lado do endereço, ou nas definições do browser) e confirme que a localização do telemóvel está ligada. iPhone: Definições › Privacidade › Serviços de localização › Safari › Ao usar a app.",
       geoUnavailable: "Não foi possível determinar a posição. Ligue a localização/GPS no telemóvel (ou no Windows: Definições › Privacidade › Localização) e tente de novo.",
       geoTimeout: "A localização demorou demasiado. Tente de novo, de preferência ao ar livre ou junto a uma janela.",
+      geoDeniedIOS: "O iPhone não deixou o Safari pedir a localização. 1) Definições › Privacidade e segurança › Serviços de localização: ative-os e, em \"Sites do Safari\" (Safari Websites), escolha \"Perguntar na próxima vez\" ou \"Ao usar a app\". 2) No Safari, toque em \"aA\" (à esquerda do endereço) › Definições do site › Localização › Perguntar ou Permitir. Depois recarregue a página e toque em ◎.",
       geoNoAnswer: "O browser não respondeu ao pedido de localização. Verifique se a localização está permitida para este site (ícone ao lado do endereço) e ligada no telemóvel, e tente de novo.",
       loadErr: "Não foi possível carregar data/zones.geojson. Corra update_zones.py e sirva a pasta por HTTP.",
       checkedAt: "Ponto verificado", offline: "Offline", install: "Instalar",
@@ -66,6 +67,7 @@
       geoDenied: "Location is blocked. Allow location for this site (icon next to the address, or in the browser settings) and make sure location is switched on on your phone. iPhone: Settings › Privacy › Location Services › Safari › While Using the App.",
       geoUnavailable: "Couldn't determine your position. Turn on location/GPS on your phone (or in Windows: Settings › Privacy › Location) and try again.",
       geoTimeout: "Getting your location took too long. Try again, ideally outdoors or near a window.",
+      geoDeniedIOS: "Your iPhone didn't let Safari ask for your location. 1) Settings › Privacy & Security › Location Services: turn it on, and under \"Safari Websites\" choose \"Ask Next Time\" or \"While Using the App\". 2) In Safari, tap \"aA\" (left of the address) › Website Settings › Location › Ask or Allow. Then reload the page and tap ◎.",
       geoNoAnswer: "The browser didn't answer the location request. Check that location is allowed for this site (icon next to the address) and switched on on your phone, then try again.",
       loadErr: "Could not load data/zones.geojson. Run update_zones.py and serve the folder over HTTP.",
       checkedAt: "Checked point", offline: "Offline", install: "Install",
@@ -334,45 +336,50 @@
     return { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } }] };
   }
 
-  // Some browsers never call back when permission is blocked or the prompt is
-  // dismissed (the API's own timeout only starts after permission), so add a watchdog.
-  function getPosition(opts) {
-    return new Promise((resolve, reject) => {
-      const dog = setTimeout(() => reject({ code: 4 }), opts.timeout + 8000);
-      navigator.geolocation.getCurrentPosition(
-        (p) => { clearTimeout(dog); resolve(p); },
-        (e) => { clearTimeout(dog); reject(e); },
-        opts,
-      );
-    });
-  }
-
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   const locateBtn = $("#locateBtn");
-  locateBtn.addEventListener("click", async () => {
+  let locateReq = 0;
+
+  // Not async on purpose: Safari on iPhone only shows the "Allow location?" prompt
+  // when getCurrentPosition is called directly inside the tap handler. Any await
+  // before it loses the user gesture and Safari silently ignores the request.
+  locateBtn.addEventListener("click", () => {
     if (!window.isSecureContext) { toast(t("geoInsecure")); return; }
     if (!navigator.geolocation) { toast(t("noGeo")); return; }
-    // If permission is already blocked, say so right away instead of waiting.
-    try {
-      const perm = await navigator.permissions?.query({ name: "geolocation" });
-      if (perm?.state === "denied") { toast(t("geoDenied"), 15000); return; }
-    } catch { /* Permissions API not available (older Safari): just try */ }
+
+    const my = ++locateReq;
+    let failed = false;
+    const fail = (code) => {
+      if (my !== locateReq || failed) return;
+      failed = true;
+      clearTimeout(dog);
+      locateBtn.classList.remove("busy");
+      const key = code === 1 ? (isIOS ? "geoDeniedIOS" : "geoDenied")
+        : { 2: "geoUnavailable", 3: "geoTimeout", 4: isIOS ? "geoDeniedIOS" : "geoNoAnswer" }[code] || "noGeo";
+      toast(t(key), 20000);
+    };
+    // A position that arrives late (e.g. the user took a while to answer the
+    // prompt) is still used, as long as no newer request was started.
+    const ok = (pos) => { if (my !== locateReq) return; clearTimeout(dog); locateBtn.classList.remove("busy"); showPosition(pos); };
+
     locateBtn.classList.add("busy");
     toast(t("locating"), 0);
-    let pos;
-    try {
-      // Precise GPS first; if it can't get a fix in time, accept a coarser (Wi-Fi/cell) position.
-      pos = await getPosition({ enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
-    } catch (err) {
-      if (err.code === 2 || err.code === 3) {
-        try { pos = await getPosition({ enableHighAccuracy: false, timeout: 20000, maximumAge: 300000 }); } catch (err2) { err = err2; }
-      }
-      if (!pos) {
-        locateBtn.classList.remove("busy");
-        toast(t({ 1: "geoDenied", 2: "geoUnavailable", 3: "geoTimeout", 4: "geoNoAnswer" }[err.code] || "noGeo"), 15000);
-        return;
-      }
-    }
-    locateBtn.classList.remove("busy");
+    // Precise GPS first; if it can't get a fix in time, accept a coarser (Wi-Fi/cell) position.
+    navigator.geolocation.getCurrentPosition(ok, (e) => {
+      if (e.code === 2 || e.code === 3) {
+        navigator.geolocation.getCurrentPosition(ok, (e2) => fail(e2.code), { enableHighAccuracy: false, timeout: 20000, maximumAge: 300000 });
+      } else fail(e.code);
+    }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
+
+    // Some browsers never answer when location is blocked or the prompt is dismissed.
+    const dog = setTimeout(() => fail(4), 40000);
+    // Report an already-blocked permission at once (the request above is already sent).
+    navigator.permissions?.query({ name: "geolocation" })
+      .then((p) => { if (p.state === "denied") fail(1); })
+      .catch(() => { /* not supported: rely on the callbacks */ });
+  });
+
+  function showPosition(pos) {
     const { longitude: lng, latitude: lat, accuracy } = pos.coords;
     meMarker.setLngLat([lng, lat]).addTo(map);
     const src = map.getSource("me");
@@ -380,7 +387,7 @@
     map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), accuracy > 1000 ? 11 : 14) });
     toast(`${t("accuracy")}: ±${Math.round(accuracy)} m${accuracy > 500 ? " — " + t("coarse") : ""}`);
     checkPoint([lng, lat], true);
-  });
+  }
   whenInput.addEventListener("change", refreshMap);
   $("#nowBtn").addEventListener("click", () => { setNow(); refreshMap(); });
   $("#showUpcoming").addEventListener("change", refreshMap);
@@ -433,7 +440,6 @@
     installBtn.hidden = false;
   });
   window.addEventListener("appinstalled", () => { installBtn.hidden = true; deferredPrompt = null; });
-  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
   if (isIOS && !standalone) installBtn.hidden = false;
   installBtn.addEventListener("click", async () => {
     if (deferredPrompt) {
