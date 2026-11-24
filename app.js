@@ -24,7 +24,8 @@
       futureHdr: "Atenção: zonas que ficam ativas nos próximos dias",
       height: "Altura", contact: "Contacto", notam: "Texto NOTAM", validity: "Validade", from: "de", to: "a",
       zonesHere: "zonas neste ponto", fetched: "Dados obtidos", issued: "emitidos pela ANAC", source: "Fonte oficial",
-      stale: "Os dados têm mais de 24 h. Atualize com update_zones.py.", noGeo: "Não foi possível obter a localização.",
+      stale: "Os dados têm mais de 24 h. Abra a app com ligação à internet para os atualizar e confirme no mapa oficial da ANAC.", noGeo: "Não foi possível obter a localização.",
+      sheet: "Painel: arraste ou toque para ajustar",
       locating: "A obter a sua localização…", accuracy: "Precisão", coarse: "posição aproximada (sem GPS)",
       geoInsecure: "A localização só funciona quando a app é aberta em https://.",
       geoDenied: "Localização bloqueada. Permita a localização para este site (ícone ao lado do endereço, ou nas definições do browser) e confirme que a localização do telemóvel está ligada. iPhone: Definições › Privacidade › Serviços de localização › Safari › Ao usar a app.",
@@ -61,7 +62,8 @@
       futureHdr: "Heads up: zones becoming active in the next days",
       height: "Height", contact: "Contact", notam: "NOTAM text", validity: "Validity", from: "from", to: "to",
       zonesHere: "zones at this point", fetched: "Data fetched", issued: "issued by ANAC", source: "Official source",
-      stale: "Data is more than 24 h old. Refresh with update_zones.py.", noGeo: "Could not get your location.",
+      stale: "Data is more than 24 h old. Open the app with an internet connection to refresh it, and confirm on ANAC's official map.", noGeo: "Could not get your location.",
+      sheet: "Panel: drag or tap to resize",
       locating: "Getting your location…", accuracy: "Accuracy", coarse: "approximate position (no GPS)",
       geoInsecure: "Location only works when the app is opened over https://.",
       geoDenied: "Location is blocked. Allow location for this site (icon next to the address, or in the browser settings) and make sure location is switched on on your phone. iPhone: Settings › Privacy › Location Services › Safari › While Using the App.",
@@ -278,7 +280,7 @@
         .setLngLat(lngLat || pt)
         .setHTML(`<b>${esc(t("v_" + worst))}</b><br><span class="zt">${active.length} ${esc(t("zonesHere"))}</span>`)
         .addTo(map);
-      if (window.matchMedia("(max-width: 760px)").matches) $("#panel").scrollTop = 0;
+      if (window.matchMedia("(max-width: 760px)").matches) { $("#panel").scrollTop = 0; sheetEnsureOpen(); }
     }
   }
 
@@ -397,7 +399,85 @@
       refreshMap();
     });
   });
-  $("#infoBtn").addEventListener("click", () => { $("#rulesBody").innerHTML = t("rulesHtml"); $("#rulesDlg").showModal(); });
+  $("#infoBtn").addEventListener("click", () => {
+    $("#rulesBody").innerHTML = `<p class="warn-inline">${esc(t("disclaimer"))}</p>` + t("rulesHtml");
+    $("#rulesDlg").showModal();
+  });
+
+  /* ---------- dismissible disclaimer banner ---------- */
+  const WARN_KEY = "warnClosedAt";
+  const WARN_DAYS = 30; // show it again after a month
+  const warnClosedAt = +store.get(WARN_KEY) || 0;
+  if (Date.now() - warnClosedAt < WARN_DAYS * 864e5) $("#warn").hidden = true;
+  $("#warnClose").addEventListener("click", () => {
+    $("#warn").hidden = true;
+    store.set(WARN_KEY, String(Date.now()));
+    map.resize();
+  });
+
+  /* ---------- draggable bottom sheet (phones) ---------- */
+  const panel = $("#panel");
+  const grab = $("#sheetGrab");
+  const phone = window.matchMedia("(max-width: 760px)");
+  const SHEET_ORDER = ["min", "mid", "max"];
+  let sheetState = SHEET_ORDER.includes(store.get("sheet")) ? store.get("sheet") : "mid";
+
+  function sheetHeights() {
+    const H = $(".layout").clientHeight;
+    return { min: 44, mid: Math.round(H * 0.45), max: Math.max(Math.round(H - 120), Math.round(H * 0.45)) };
+  }
+  function setSheet(state, animate = true) {
+    sheetState = state;
+    store.set("sheet", state);
+    if (!phone.matches) { panel.style.height = ""; panel.classList.remove("collapsed"); return; }
+    panel.classList.toggle("animating", animate);
+    panel.style.height = sheetHeights()[state] + "px";
+    panel.classList.toggle("collapsed", state === "min");
+    if (state === "min") panel.scrollTop = 0;
+    grab.setAttribute("aria-expanded", String(state !== "min"));
+    setTimeout(() => map.resize(), animate ? 260 : 0);
+  }
+  function sheetEnsureOpen() { if (sheetState === "min") setSheet("mid"); }
+
+  let drag = null;
+  grab.addEventListener("pointerdown", (e) => {
+    if (!phone.matches) return;
+    drag = { y0: e.clientY, h0: panel.getBoundingClientRect().height, lastY: e.clientY, lastT: e.timeStamp, v: 0, moved: false };
+    panel.classList.remove("animating", "collapsed");
+    grab.setPointerCapture(e.pointerId);
+  });
+  grab.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const dy = e.clientY - drag.y0;
+    if (Math.abs(dy) > 5) drag.moved = true;
+    const { min, max } = sheetHeights();
+    panel.style.height = Math.min(max, Math.max(min, drag.h0 - dy)) + "px";
+    const dt = e.timeStamp - drag.lastT;
+    if (dt > 0) drag.v = (e.clientY - drag.lastY) / dt; // px/ms, positive = moving down
+    drag.lastY = e.clientY; drag.lastT = e.timeStamp;
+  });
+  const endDrag = () => {
+    if (!drag) return;
+    const d = drag; drag = null;
+    const idx = SHEET_ORDER.indexOf(sheetState);
+    if (!d.moved) { setSheet(sheetState === "min" ? "mid" : "min"); return; } // tap toggles
+    if (d.v < -0.4) { setSheet(SHEET_ORDER[Math.min(2, idx + 1)]); return; } // flick up
+    if (d.v > 0.4) { setSheet(SHEET_ORDER[Math.max(0, idx - 1)]); return; }  // flick down
+    const h = panel.getBoundingClientRect().height;
+    const hs = sheetHeights();
+    setSheet(SHEET_ORDER.reduce((best, s) => (Math.abs(hs[s] - h) < Math.abs(hs[best] - h) ? s : best), "mid"));
+  };
+  grab.addEventListener("pointerup", endDrag);
+  grab.addEventListener("pointercancel", endDrag);
+  grab.addEventListener("keydown", (e) => {
+    const idx = SHEET_ORDER.indexOf(sheetState);
+    if (e.key === "ArrowUp") { e.preventDefault(); setSheet(SHEET_ORDER[Math.min(2, idx + 1)]); }
+    else if (e.key === "ArrowDown") { e.preventDefault(); setSheet(SHEET_ORDER[Math.max(0, idx - 1)]); }
+    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSheet(sheetState === "min" ? "mid" : "min"); }
+  });
+  phone.addEventListener("change", () => setSheet(sheetState, false));
+  window.addEventListener("resize", () => { if (!drag) setSheet(sheetState, false); });
+  setSheet(sheetState, false);
   $("#langBtn").addEventListener("click", () => {
     lang = lang === "pt" ? "en" : "pt";
     store.set("lang", lang);
@@ -411,6 +491,8 @@
     document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
     document.querySelectorAll("[data-i18n-ph]").forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
     document.querySelectorAll("[data-i18n-title]").forEach((el) => { el.title = t(el.dataset.i18nTitle); });
+    $("#warnClose").setAttribute("aria-label", t("close"));
+    $("#sheetGrab").setAttribute("aria-label", t("sheet"));
     renderMeta();
   }
 

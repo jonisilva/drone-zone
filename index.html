@@ -33,8 +33,9 @@
     </div>
   </header>
 
-  <div class="warn" id="warn" data-i18n="disclaimer">
-    App não oficial. Confirme sempre na fonte oficial da ANAC antes de voar.
+  <div class="warn" id="warn">
+    <span data-i18n="disclaimer">App não oficial. Confirme sempre na fonte oficial da ANAC antes de voar.</span>
+    <button id="warnClose" class="warn-x" type="button" aria-label="Fechar">×</button>
   </div>
 
   <main class="layout">
@@ -57,7 +58,7 @@
     </section>
 
     <aside class="panel" id="panel">
-      <div class="panel-handle" aria-hidden="true"></div>
+      <div class="sheet-grab" id="sheetGrab" role="button" tabindex="0" aria-label="Painel" aria-controls="panel"><span></span></div>
 
       <div class="when">
         <label for="when" data-i18n="when">Data e hora do voo</label>
