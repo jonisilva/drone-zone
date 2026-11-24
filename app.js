@@ -25,6 +25,12 @@
       height: "Altura", contact: "Contacto", notam: "Texto NOTAM", validity: "Validade", from: "de", to: "a",
       zonesHere: "zonas neste ponto", fetched: "Dados obtidos", issued: "emitidos pela ANAC", source: "Fonte oficial",
       stale: "Os dados têm mais de 24 h. Atualize com update_zones.py.", noGeo: "Não foi possível obter a localização.",
+      locating: "A obter a sua localização…", accuracy: "Precisão", coarse: "posição aproximada (sem GPS)",
+      geoInsecure: "A localização só funciona quando a app é aberta em https://.",
+      geoDenied: "Localização bloqueada. Permita a localização para este site (ícone ao lado do endereço, ou nas definições do browser) e confirme que a localização do telemóvel está ligada. iPhone: Definições › Privacidade › Serviços de localização › Safari › Ao usar a app.",
+      geoUnavailable: "Não foi possível determinar a posição. Ligue a localização/GPS no telemóvel (ou no Windows: Definições › Privacidade › Localização) e tente de novo.",
+      geoTimeout: "A localização demorou demasiado. Tente de novo, de preferência ao ar livre ou junto a uma janela.",
+      geoNoAnswer: "O browser não respondeu ao pedido de localização. Verifique se a localização está permitida para este site (ícone ao lado do endereço) e ligada no telemóvel, e tente de novo.",
       loadErr: "Não foi possível carregar data/zones.geojson. Corra update_zones.py e sirva a pasta por HTTP.",
       checkedAt: "Ponto verificado", offline: "Offline", install: "Instalar",
       iosHint: "No Safari, toque em Partilhar e depois em \"Adicionar ao ecrã principal\".",
@@ -55,6 +61,12 @@
       height: "Height", contact: "Contact", notam: "NOTAM text", validity: "Validity", from: "from", to: "to",
       zonesHere: "zones at this point", fetched: "Data fetched", issued: "issued by ANAC", source: "Official source",
       stale: "Data is more than 24 h old. Refresh with update_zones.py.", noGeo: "Could not get your location.",
+      locating: "Getting your location…", accuracy: "Accuracy", coarse: "approximate position (no GPS)",
+      geoInsecure: "Location only works when the app is opened over https://.",
+      geoDenied: "Location is blocked. Allow location for this site (icon next to the address, or in the browser settings) and make sure location is switched on on your phone. iPhone: Settings › Privacy › Location Services › Safari › While Using the App.",
+      geoUnavailable: "Couldn't determine your position. Turn on location/GPS on your phone (or in Windows: Settings › Privacy › Location) and try again.",
+      geoTimeout: "Getting your location took too long. Try again, ideally outdoors or near a window.",
+      geoNoAnswer: "The browser didn't answer the location request. Check that location is allowed for this site (icon next to the address) and switched on on your phone, then try again.",
       loadErr: "Could not load data/zones.geojson. Run update_zones.py and serve the folder over HTTP.",
       checkedAt: "Checked point", offline: "Offline", install: "Install",
       iosHint: "In Safari, tap Share and then \"Add to Home Screen\".",
@@ -157,8 +169,13 @@
           maxzoom: 19,
         },
         zones: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+        me: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
       },
-      layers: [{ id: "osm", type: "raster", source: "osm" }, ...zoneLayers],
+      layers: [
+        { id: "osm", type: "raster", source: "osm" },
+        ...zoneLayers,
+        { id: "me-accuracy", type: "fill", source: "me", paint: { "fill-color": "#1f6feb", "fill-opacity": 0.12, "fill-outline-color": "#1f6feb" } },
+      ],
     },
   });
   window.droneZoneMap = map; // handy for debugging in the console
@@ -294,17 +311,75 @@
     const c = map.getCenter();
     checkPoint([c.lng, c.lat], true, c);
   });
-  $("#locateBtn").addEventListener("click", () => {
-    if (!navigator.geolocation) { alert(t("noGeo")); return; }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const pt = [pos.coords.longitude, pos.coords.latitude];
-        map.flyTo({ center: pt, zoom: 13 });
-        checkPoint(pt, true);
-      },
-      () => alert(t("noGeo")),
-      { enableHighAccuracy: true, timeout: 10000 },
-    );
+  /* ---------- my location ---------- */
+  let toastTimer = null;
+  function toast(msg, ms = 6000) {
+    const el = $("#toast");
+    el.textContent = msg;
+    el.hidden = false;
+    clearTimeout(toastTimer);
+    if (ms) toastTimer = setTimeout(() => { el.hidden = true; }, ms);
+  }
+  $("#toast").addEventListener("click", (e) => { e.currentTarget.hidden = true; });
+
+  const meEl = document.createElement("div");
+  meEl.className = "me-dot";
+  const meMarker = new maplibregl.Marker({ element: meEl });
+  function accuracyRing(lng, lat, r) {
+    const ring = [];
+    for (let i = 0; i <= 48; i++) {
+      const a = (2 * Math.PI * i) / 48;
+      ring.push([lng + (r * Math.cos(a)) / (111320 * Math.cos((lat * Math.PI) / 180)), lat + (r * Math.sin(a)) / 111320]);
+    }
+    return { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } }] };
+  }
+
+  // Some browsers never call back when permission is blocked or the prompt is
+  // dismissed (the API's own timeout only starts after permission), so add a watchdog.
+  function getPosition(opts) {
+    return new Promise((resolve, reject) => {
+      const dog = setTimeout(() => reject({ code: 4 }), opts.timeout + 8000);
+      navigator.geolocation.getCurrentPosition(
+        (p) => { clearTimeout(dog); resolve(p); },
+        (e) => { clearTimeout(dog); reject(e); },
+        opts,
+      );
+    });
+  }
+
+  const locateBtn = $("#locateBtn");
+  locateBtn.addEventListener("click", async () => {
+    if (!window.isSecureContext) { toast(t("geoInsecure")); return; }
+    if (!navigator.geolocation) { toast(t("noGeo")); return; }
+    // If permission is already blocked, say so right away instead of waiting.
+    try {
+      const perm = await navigator.permissions?.query({ name: "geolocation" });
+      if (perm?.state === "denied") { toast(t("geoDenied"), 15000); return; }
+    } catch { /* Permissions API not available (older Safari): just try */ }
+    locateBtn.classList.add("busy");
+    toast(t("locating"), 0);
+    let pos;
+    try {
+      // Precise GPS first; if it can't get a fix in time, accept a coarser (Wi-Fi/cell) position.
+      pos = await getPosition({ enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
+    } catch (err) {
+      if (err.code === 2 || err.code === 3) {
+        try { pos = await getPosition({ enableHighAccuracy: false, timeout: 20000, maximumAge: 300000 }); } catch (err2) { err = err2; }
+      }
+      if (!pos) {
+        locateBtn.classList.remove("busy");
+        toast(t({ 1: "geoDenied", 2: "geoUnavailable", 3: "geoTimeout", 4: "geoNoAnswer" }[err.code] || "noGeo"), 15000);
+        return;
+      }
+    }
+    locateBtn.classList.remove("busy");
+    const { longitude: lng, latitude: lat, accuracy } = pos.coords;
+    meMarker.setLngLat([lng, lat]).addTo(map);
+    const src = map.getSource("me");
+    if (src) src.setData(accuracyRing(lng, lat, accuracy));
+    map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), accuracy > 1000 ? 11 : 14) });
+    toast(`${t("accuracy")}: ±${Math.round(accuracy)} m${accuracy > 500 ? " — " + t("coarse") : ""}`);
+    checkPoint([lng, lat], true);
   });
   whenInput.addEventListener("change", refreshMap);
   $("#nowBtn").addEventListener("click", () => { setNow(); refreshMap(); });
