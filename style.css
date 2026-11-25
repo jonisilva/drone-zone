@@ -105,6 +105,8 @@ body {
 }
 
 .fab-col { display: flex; flex-direction: column; gap: 10px; }
+/* Wider screens: the panel toggle hides the side panel entirely. */
+body.panel-hidden .panel { display: none; }
 .fab svg { width: 22px; height: 22px; display: block; margin: auto; }
 /* Satellite imagery is dark: keep the centre crosshair visible. */
 body.sat .crosshair { border-color: #fff; }

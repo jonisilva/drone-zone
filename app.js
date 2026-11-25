@@ -27,6 +27,7 @@
       stale: "Os dados têm mais de 24 h. Abra a app com ligação à internet para os atualizar e confirme no mapa oficial da ANAC.", noGeo: "Não foi possível obter a localização.",
       sheet: "Painel: arraste ou toque para ajustar",
       toSat: "Vista de satélite", toMap: "Vista de mapa",
+      hidePanel: "Esconder painel", showPanel: "Mostrar painel",
       locating: "A obter a sua localização…", accuracy: "Precisão", coarse: "posição aproximada (sem GPS)",
       geoInsecure: "A localização só funciona quando a app é aberta em https://.",
       geoDenied: "Localização bloqueada. Permita a localização para este site (ícone ao lado do endereço, ou nas definições do browser) e confirme que a localização do telemóvel está ligada. iPhone: Definições › Privacidade › Serviços de localização › Safari › Ao usar a app.",
@@ -66,6 +67,7 @@
       stale: "Data is more than 24 h old. Open the app with an internet connection to refresh it, and confirm on ANAC's official map.", noGeo: "Could not get your location.",
       sheet: "Panel: drag or tap to resize",
       toSat: "Satellite view", toMap: "Map view",
+      hidePanel: "Hide panel", showPanel: "Show panel",
       locating: "Getting your location…", accuracy: "Accuracy", coarse: "approximate position (no GPS)",
       geoInsecure: "Location only works when the app is opened over https://.",
       geoDenied: "Location is blocked. Allow location for this site (icon next to the address, or in the browser settings) and make sure location is switched on on your phone. iPhone: Settings › Privacy › Location Services › Safari › While Using the App.",
@@ -217,7 +219,13 @@
     // The button shows what you switch TO.
     basemapBtn.innerHTML = sat
       ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zm0 2.2 6 2v11.6l-6-2V6.2z" fill="currentColor"/></svg>'
-      : '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="m5 17 5-6 3 4 2-2 4 4z" fill="currentColor"/><circle cx="16" cy="9" r="1.6" fill="currentColor"/></svg>';
+      // Satellite: body with two solar panels on a diagonal, signal arcs in the corner.
+      : '<svg viewBox="0 0 24 24" aria-hidden="true"><g transform="rotate(45 12 12)" fill="currentColor">'
+        + '<rect x="9.5" y="9" width="5" height="6" rx="1"/>'
+        + '<rect x="1" y="9.5" width="6.5" height="5" rx=".7"/><rect x="16.5" y="9.5" width="6.5" height="5" rx=".7"/>'
+        + '<rect x="7.4" y="11.3" width="2.2" height="1.4"/><rect x="14.4" y="11.3" width="2.2" height="1.4"/></g>'
+        + '<path d="M10 14 8 16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="7.6" cy="16.4" r="1.1" fill="currentColor"/>'
+        + '<path d="M2.5 15.5a6 6 0 0 1 6 6M2.5 18.8a2.7 2.7 0 0 1 2.7 2.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
     const label = t(sat ? "toMap" : "toSat");
     basemapBtn.title = label;
     basemapBtn.setAttribute("aria-label", label);
@@ -326,7 +334,8 @@
         .setLngLat(lngLat || pt)
         .setHTML(`<b>${esc(t("v_" + worst))}</b><br><span class="zt">${active.length} ${esc(t("zonesHere"))}</span>`)
         .addTo(map);
-      if (window.matchMedia("(max-width: 760px)").matches) { $("#panel").scrollTop = 0; sheetEnsureOpen(); }
+      $("#panel").scrollTop = 0;
+      sheetEnsureOpen(); // show the result even if the panel was hidden
     }
   }
 
@@ -467,15 +476,40 @@
   const phone = window.matchMedia("(max-width: 760px)");
   const SHEET_ORDER = ["min", "mid", "max"];
   let sheetState = SHEET_ORDER.includes(store.get("sheet")) ? store.get("sheet") : "mid";
+  // Size to return to when the panel is reopened after being hidden.
+  let lastOpen = ["mid", "max"].includes(store.get("sheetOpen")) ? store.get("sheetOpen") : "mid";
+  const panelBtn = $("#panelBtn");
 
   function sheetHeights() {
     const H = $(".layout").clientHeight;
     return { min: 44, mid: Math.round(H * 0.45), max: Math.max(Math.round(H - 120), Math.round(H * 0.45)) };
   }
+  function updatePanelBtn() {
+    const open = sheetState !== "min";
+    // Phone: panel at the bottom; wider screens: panel on the right. Filled part = panel showing.
+    const bar = phone.matches
+      ? (open ? '<rect x="4" y="12" width="16" height="7" fill="currentColor"/>' : '<rect x="4" y="17" width="16" height="2" fill="currentColor"/>')
+      : (open ? '<rect x="13" y="5" width="7" height="14" fill="currentColor"/>' : '<rect x="18" y="5" width="2" height="14" fill="currentColor"/>');
+    panelBtn.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>${bar}</svg>`;
+    const label = t(open ? "hidePanel" : "showPanel");
+    panelBtn.title = label;
+    panelBtn.setAttribute("aria-label", label);
+    panelBtn.setAttribute("aria-expanded", String(open));
+  }
   function setSheet(state, animate = true) {
     sheetState = state;
     store.set("sheet", state);
-    if (!phone.matches) { panel.style.height = ""; panel.classList.remove("collapsed"); return; }
+    if (state !== "min") { lastOpen = state; store.set("sheetOpen", state); }
+    updatePanelBtn();
+    if (!phone.matches) {
+      // Wider screens: "min" hides the side panel so the map uses the full width.
+      panel.style.height = "";
+      panel.classList.remove("collapsed", "animating");
+      document.body.classList.toggle("panel-hidden", state === "min");
+      setTimeout(() => map.resize(), 0);
+      return;
+    }
+    document.body.classList.remove("panel-hidden");
     panel.classList.toggle("animating", animate);
     panel.style.height = sheetHeights()[state] + "px";
     panel.classList.toggle("collapsed", state === "min");
@@ -483,7 +517,9 @@
     grab.setAttribute("aria-expanded", String(state !== "min"));
     setTimeout(() => map.resize(), animate ? 260 : 0);
   }
-  function sheetEnsureOpen() { if (sheetState === "min") setSheet("mid"); }
+  function sheetEnsureOpen() { if (sheetState === "min") setSheet(lastOpen); }
+  function sheetToggle() { setSheet(sheetState === "min" ? lastOpen : "min"); }
+  panelBtn.addEventListener("click", sheetToggle);
 
   let drag = null;
   grab.addEventListener("pointerdown", (e) => {
@@ -506,7 +542,7 @@
     if (!drag) return;
     const d = drag; drag = null;
     const idx = SHEET_ORDER.indexOf(sheetState);
-    if (!d.moved) { setSheet(sheetState === "min" ? "mid" : "min"); return; } // tap toggles
+    if (!d.moved) { sheetToggle(); return; } // tap toggles
     if (d.v < -0.4) { setSheet(SHEET_ORDER[Math.min(2, idx + 1)]); return; } // flick up
     if (d.v > 0.4) { setSheet(SHEET_ORDER[Math.max(0, idx - 1)]); return; }  // flick down
     const h = panel.getBoundingClientRect().height;
@@ -519,7 +555,7 @@
     const idx = SHEET_ORDER.indexOf(sheetState);
     if (e.key === "ArrowUp") { e.preventDefault(); setSheet(SHEET_ORDER[Math.min(2, idx + 1)]); }
     else if (e.key === "ArrowDown") { e.preventDefault(); setSheet(SHEET_ORDER[Math.max(0, idx - 1)]); }
-    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSheet(sheetState === "min" ? "mid" : "min"); }
+    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); sheetToggle(); }
   });
   phone.addEventListener("change", () => setSheet(sheetState, false));
   window.addEventListener("resize", () => { if (!drag) setSheet(sheetState, false); });
@@ -540,6 +576,7 @@
     $("#warnClose").setAttribute("aria-label", t("close"));
     $("#sheetGrab").setAttribute("aria-label", t("sheet"));
     applyBasemap();
+    updatePanelBtn();
     renderMeta();
   }
 
