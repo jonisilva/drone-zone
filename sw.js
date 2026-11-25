@@ -1,5 +1,5 @@
 /* Service worker: offline app shell, last-known zone data, and viewed map tiles. */
-const VERSION = "v10"; // bump on every release so phones pick up new files
+const VERSION = "v11"; // bump on every release so phones pick up new files
 const SHELL = `zd-shell-${VERSION}`;
 const DATA = "zd-data";
 const TILES = "zd-tiles";
@@ -85,18 +85,32 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // App shell: cache first, refresh in background for same-origin files.
+  // The app's own page/script/styles: network first, so the page and its script
+  // always come from the same release when online (cache-first could pair an old
+  // cached index.html with a new app.js and break). Cache is the offline fallback.
+  const ownCode = url.origin === location.origin && (req.mode === "navigate" || /\.(html|js|css|webmanifest)$/.test(url.pathname) || url.pathname.endsWith("/"));
+  if (ownCode) {
+    e.respondWith((async () => {
+      const cache = await caches.open(SHELL);
+      try {
+        const res = await fetch(req, { cache: "no-cache" });
+        if (res.ok) await cache.put(req.mode === "navigate" ? "index.html" : req, res.clone());
+        return res;
+      } catch {
+        const hit = await cache.match(req.mode === "navigate" ? "index.html" : req, { ignoreSearch: true });
+        return hit || Response.error();
+      }
+    })());
+    return;
+  }
+
+  // Versioned libraries (unpkg, pinned) and icons: cache first.
   e.respondWith((async () => {
     const cache = await caches.open(SHELL);
-    const hit = await cache.match(req, { ignoreSearch: req.mode === "navigate" });
-    const net = fetch(req).then(async (res) => {
-      if (res.ok && (url.origin === location.origin || url.hostname === "unpkg.com")) await cache.put(req, res.clone());
-      return res;
-    }).catch(() => null);
-    if (hit) { e.waitUntil(net); return hit; }
-    const res = await net;
-    if (res) return res;
-    if (req.mode === "navigate") return (await cache.match("index.html")) || Response.error();
-    return Response.error();
+    const hit = await cache.match(req);
+    if (hit) return hit;
+    const res = await fetch(req);
+    if (res.ok && (url.origin === location.origin || url.hostname === "unpkg.com")) await cache.put(req, res.clone());
+    return res;
   })());
 });

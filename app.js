@@ -2,6 +2,15 @@
 (() => {
   "use strict";
 
+  // Safety net: if this script runs on an older cached page that lacks the
+  // elements it needs, reload once to get a matching page instead of breaking.
+  if (!document.querySelector("#panelBtn") || !document.querySelector("#panelShowBtn")) {
+    let reloaded = false;
+    try { reloaded = sessionStorage.getItem("dzReloaded") === "1"; sessionStorage.setItem("dzReloaded", "1"); } catch { /* ignore */ }
+    if (!reloaded) { location.reload(); return; }
+  }
+  try { sessionStorage.removeItem("dzReloaded"); } catch { /* ignore */ }
+
   const TYPES = ["NO_RESTRICTION", "CONDITIONAL", "REQ_AUTHORIZATION", "PROHIBITED"]; // least → most restrictive
   const COLORS = { PROHIBITED: "#d7263d", REQ_AUTHORIZATION: "#f2a900", CONDITIONAL: "#2d7dd2", NO_RESTRICTION: "#8a94a3" };
   const UPCOMING_DAYS = 7;
