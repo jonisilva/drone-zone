@@ -15,6 +15,8 @@
   const COLORS = { PROHIBITED: "#d7263d", REQ_AUTHORIZATION: "#f2a900", CONDITIONAL: "#2d7dd2", NO_RESTRICTION: "#8a94a3" };
   const UPCOMING_DAYS = 7;
   const OFFICIAL = "https://dnt.anac.pt/";
+  // Contact goes through a Google Form so no personal email is published.
+  const CONTACT_FORM = "https://docs.google.com/forms/d/e/1FAIpQLSeB3KM8q68tHTzRw94Wpx9mxxMWgkHwHXQ8vIPB1lxKSnnMJQ/viewform";
 
   const I18N = {
     pt: {
@@ -33,6 +35,7 @@
       futureHdr: "Atenção: zonas que ficam ativas nos próximos dias",
       height: "Altura", contact: "Contacto", notam: "Texto NOTAM", validity: "Validade", from: "de", to: "a",
       zonesHere: "zonas neste ponto", fetched: "Dados obtidos", issued: "emitidos pela ANAC", source: "Fonte oficial",
+      contact: "Contacto", contactLong: "Encontrou um erro nos dados ou tem uma sugestão? Contacte-nos",
       stale: "Os dados têm mais de 24 h. Abra a app com ligação à internet para os atualizar e confirme no mapa oficial da ANAC.", noGeo: "Não foi possível obter a localização.",
       sheet: "Painel: arraste ou toque para ajustar",
       toSat: "Vista de satélite", toMap: "Vista de mapa",
@@ -73,6 +76,7 @@
       futureHdr: "Heads up: zones becoming active in the next days",
       height: "Height", contact: "Contact", notam: "NOTAM text", validity: "Validity", from: "from", to: "to",
       zonesHere: "zones at this point", fetched: "Data fetched", issued: "issued by ANAC", source: "Official source",
+      contact: "Contact", contactLong: "Found a data error or have a suggestion? Contact us",
       stale: "Data is more than 24 h old. Open the app with an internet connection to refresh it, and confirm on ANAC's official map.", noGeo: "Could not get your location.",
       sheet: "Panel: drag or tap to resize",
       toSat: "Satellite view", toMap: "Map view",
@@ -464,7 +468,8 @@
     });
   });
   $("#infoBtn").addEventListener("click", () => {
-    $("#rulesBody").innerHTML = `<p class="warn-inline">${esc(t("disclaimer"))}</p>` + t("rulesHtml");
+    $("#rulesBody").innerHTML = `<p class="warn-inline">${esc(t("disclaimer"))}</p>` + t("rulesHtml")
+      + `<p><a class="contact-link" href="${CONTACT_FORM}" target="_blank" rel="noopener">✉ ${esc(t("contactLong"))}</a></p>`;
     $("#rulesDlg").showModal();
   });
 
@@ -603,7 +608,8 @@
     $("#meta").innerHTML = `${esc(t("fetched"))}: ${fetched ? esc(fmtDate(fetched)) : "?"}${m.issued ? ` (${esc(t("issued"))} ${esc(fmtDate(Date.parse(m.issued)))})` : ""}.
       ${stale ? `<br><b>${esc(t("stale"))}</b>` : ""}
       ${fromCache ? `<br><b>${esc(t("offlineData"))}</b>` : ""}
-      <br>${esc(t("source"))}: <a href="${OFFICIAL}" target="_blank" rel="noopener">dnt.anac.pt</a>`;
+      <br>${esc(t("source"))}: <a href="${OFFICIAL}" target="_blank" rel="noopener">dnt.anac.pt</a>
+      <br><a class="contact-link" href="${CONTACT_FORM}" target="_blank" rel="noopener">✉ ${esc(t("contactLong"))}</a>`;
   }
 
   /* ---------- PWA: service worker, install, offline ---------- */

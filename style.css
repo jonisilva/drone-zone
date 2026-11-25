@@ -169,6 +169,7 @@ body.sat .crosshair::after { background: #fff; }
 
 .meta { font-size: 12px; color: var(--muted); margin-top: 20px; }
 .meta a { color: var(--accent); }
+.contact-link { display: inline-block; margin-top: 8px; font-weight: 600; color: var(--accent); }
 
 .verdict { margin-top: 14px; border-radius: 12px; padding: 12px 14px; }
 .verdict.ok { background: var(--ok-bg); color: var(--ok-fg); }
