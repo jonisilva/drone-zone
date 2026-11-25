@@ -104,6 +104,11 @@ body {
   background: var(--surface); color: var(--text); font-size: 20px; cursor: pointer; box-shadow: var(--shadow);
 }
 
+.fab-col { display: flex; flex-direction: column; gap: 10px; }
+.fab svg { width: 22px; height: 22px; display: block; margin: auto; }
+/* Satellite imagery is dark: keep the centre crosshair visible. */
+body.sat .crosshair { border-color: #fff; }
+body.sat .crosshair::after { background: #fff; }
 .fab.busy { animation: spin 1s linear infinite; color: var(--accent); }
 @keyframes spin { to { transform: rotate(360deg); } }
 

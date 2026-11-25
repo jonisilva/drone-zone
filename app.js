@@ -26,6 +26,7 @@
       zonesHere: "zonas neste ponto", fetched: "Dados obtidos", issued: "emitidos pela ANAC", source: "Fonte oficial",
       stale: "Os dados têm mais de 24 h. Abra a app com ligação à internet para os atualizar e confirme no mapa oficial da ANAC.", noGeo: "Não foi possível obter a localização.",
       sheet: "Painel: arraste ou toque para ajustar",
+      toSat: "Vista de satélite", toMap: "Vista de mapa",
       locating: "A obter a sua localização…", accuracy: "Precisão", coarse: "posição aproximada (sem GPS)",
       geoInsecure: "A localização só funciona quando a app é aberta em https://.",
       geoDenied: "Localização bloqueada. Permita a localização para este site (ícone ao lado do endereço, ou nas definições do browser) e confirme que a localização do telemóvel está ligada. iPhone: Definições › Privacidade › Serviços de localização › Safari › Ao usar a app.",
@@ -64,6 +65,7 @@
       zonesHere: "zones at this point", fetched: "Data fetched", issued: "issued by ANAC", source: "Official source",
       stale: "Data is more than 24 h old. Open the app with an internet connection to refresh it, and confirm on ANAC's official map.", noGeo: "Could not get your location.",
       sheet: "Panel: drag or tap to resize",
+      toSat: "Satellite view", toMap: "Map view",
       locating: "Getting your location…", accuracy: "Accuracy", coarse: "approximate position (no GPS)",
       geoInsecure: "Location only works when the app is opened over https://.",
       geoDenied: "Location is blocked. Allow location for this site (icon next to the address, or in the browser settings) and make sure location is switched on on your phone. iPhone: Settings › Privacy › Location Services › Safari › While Using the App.",
@@ -157,6 +159,10 @@
     { id: "zones-upcoming", type: "line", source: "zones", filter: isState("upcoming"),
       paint: { "line-color": "#9b51e0", "line-width": 2, "line-dasharray": [2, 2] } },
   ];
+  // Base map: "map" (OpenStreetMap) or "sat" (Esri World Imagery + place names).
+  const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services";
+  let basemap = store.get("basemap") === "sat" ? "sat" : "map";
+  const vis = (on) => ({ visibility: on ? "visible" : "none" });
   const map = new maplibregl.Map({
     container: "map",
     center: [-8.2, 39.6],
@@ -169,20 +175,60 @@
         osm: {
           type: "raster", tileSize: 256,
           tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · Zonas: <a href="https://dnt.anac.pt/">ANAC</a>',
+          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
           maxzoom: 19,
         },
-        zones: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+        sat: {
+          type: "raster", tileSize: 256,
+          tiles: [`${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`],
+          attribution: "Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+          maxzoom: 19,
+        },
+        "sat-labels": {
+          type: "raster", tileSize: 256,
+          tiles: [`${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`],
+          maxzoom: 19,
+        },
+        zones: {
+          type: "geojson", data: { type: "FeatureCollection", features: [] },
+          attribution: 'Zonas: <a href="https://dnt.anac.pt/">ANAC</a>',
+        },
         me: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
       },
       layers: [
-        { id: "osm", type: "raster", source: "osm" },
+        { id: "osm", type: "raster", source: "osm", layout: vis(basemap === "map") },
+        { id: "sat", type: "raster", source: "sat", layout: vis(basemap === "sat") },
         ...zoneLayers,
+        { id: "sat-labels", type: "raster", source: "sat-labels", layout: vis(basemap === "sat") },
         { id: "me-accuracy", type: "fill", source: "me", paint: { "fill-color": "#1f6feb", "fill-opacity": 0.12, "fill-outline-color": "#1f6feb" } },
       ],
     },
   });
   window.droneZoneMap = map; // handy for debugging in the console
+
+  const basemapBtn = $("#basemapBtn");
+  function applyBasemap() {
+    const sat = basemap === "sat";
+    if (map.getLayer("osm")) {
+      map.setLayoutProperty("osm", "visibility", sat ? "none" : "visible");
+      map.setLayoutProperty("sat", "visibility", sat ? "visible" : "none");
+      map.setLayoutProperty("sat-labels", "visibility", sat ? "visible" : "none");
+    }
+    // The button shows what you switch TO.
+    basemapBtn.innerHTML = sat
+      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zm0 2.2 6 2v11.6l-6-2V6.2z" fill="currentColor"/></svg>'
+      : '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="m5 17 5-6 3 4 2-2 4 4z" fill="currentColor"/><circle cx="16" cy="9" r="1.6" fill="currentColor"/></svg>';
+    const label = t(sat ? "toMap" : "toSat");
+    basemapBtn.title = label;
+    basemapBtn.setAttribute("aria-label", label);
+    basemapBtn.setAttribute("aria-pressed", String(sat));
+    document.body.classList.toggle("sat", sat);
+  }
+  basemapBtn.addEventListener("click", () => {
+    basemap = basemap === "sat" ? "map" : "sat";
+    store.set("basemap", basemap);
+    applyBasemap();
+  });
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
   map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
@@ -493,6 +539,7 @@
     document.querySelectorAll("[data-i18n-title]").forEach((el) => { el.title = t(el.dataset.i18nTitle); });
     $("#warnClose").setAttribute("aria-label", t("close"));
     $("#sheetGrab").setAttribute("aria-label", t("sheet"));
+    applyBasemap();
     renderMeta();
   }
 
