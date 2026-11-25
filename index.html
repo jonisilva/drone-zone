@@ -51,7 +51,7 @@
       <div class="fab-col">
         <button id="locateBtn" class="fab" type="button" data-i18n-title="myLocation" title="A minha localização">◎</button>
         <button id="basemapBtn" class="fab" type="button" aria-pressed="false"></button>
-        <button id="panelBtn" class="fab" type="button" aria-controls="panel" aria-expanded="true"></button>
+        <button id="panelShowBtn" class="fab panel-show" type="button" aria-controls="panel"></button>
       </div>
 
       <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
@@ -60,7 +60,10 @@
     </section>
 
     <aside class="panel" id="panel">
-      <div class="sheet-grab" id="sheetGrab" role="button" tabindex="0" aria-label="Painel" aria-controls="panel"><span></span></div>
+      <div class="sheet-grab" id="sheetGrab">
+        <span aria-hidden="true"></span>
+        <button id="panelBtn" class="sheet-btn" type="button" aria-controls="panel" aria-expanded="true"></button>
+      </div>
 
       <div class="when">
         <label for="when" data-i18n="when">Data e hora do voo</label>

@@ -484,17 +484,23 @@
     const H = $(".layout").clientHeight;
     return { min: 44, mid: Math.round(H * 0.45), max: Math.max(Math.round(H - 120), Math.round(H * 0.45)) };
   }
+  const panelShowBtn = $("#panelShowBtn");
+  const chevron = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const CHEV = { down: "M6 9l6 6 6-6", up: "M6 15l6-6 6 6", right: "M9 6l6 6-6 6", left: "M15 6l-6 6 6 6" };
+
+  // The toggle lives in the panel's top bar. Phones: arrow down hides the bottom
+  // menu, arrow up brings it back (the bar stays visible when collapsed).
+  // Wider screens: arrow right hides the side panel; a map button reopens it.
   function updatePanelBtn() {
     const open = sheetState !== "min";
-    // Phone: panel at the bottom; wider screens: panel on the right. Filled part = panel showing.
-    const bar = phone.matches
-      ? (open ? '<rect x="4" y="12" width="16" height="7" fill="currentColor"/>' : '<rect x="4" y="17" width="16" height="2" fill="currentColor"/>')
-      : (open ? '<rect x="13" y="5" width="7" height="14" fill="currentColor"/>' : '<rect x="18" y="5" width="2" height="14" fill="currentColor"/>');
-    panelBtn.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>${bar}</svg>`;
+    panelBtn.innerHTML = chevron(phone.matches ? (open ? CHEV.down : CHEV.up) : CHEV.right);
     const label = t(open ? "hidePanel" : "showPanel");
     panelBtn.title = label;
     panelBtn.setAttribute("aria-label", label);
     panelBtn.setAttribute("aria-expanded", String(open));
+    panelShowBtn.innerHTML = chevron(CHEV.left);
+    panelShowBtn.title = t("showPanel");
+    panelShowBtn.setAttribute("aria-label", t("showPanel"));
   }
   function setSheet(state, animate = true) {
     sheetState = state;
@@ -514,16 +520,23 @@
     panel.style.height = sheetHeights()[state] + "px";
     panel.classList.toggle("collapsed", state === "min");
     if (state === "min") panel.scrollTop = 0;
-    grab.setAttribute("aria-expanded", String(state !== "min"));
     setTimeout(() => map.resize(), animate ? 260 : 0);
   }
   function sheetEnsureOpen() { if (sheetState === "min") setSheet(lastOpen); }
   function sheetToggle() { setSheet(sheetState === "min" ? lastOpen : "min"); }
   panelBtn.addEventListener("click", sheetToggle);
+  panelShowBtn.addEventListener("click", () => setSheet(lastOpen));
+  // Arrow keys on the toggle step through the sheet sizes on phones.
+  panelBtn.addEventListener("keydown", (e) => {
+    if (!phone.matches) return;
+    const idx = SHEET_ORDER.indexOf(sheetState);
+    if (e.key === "ArrowUp") { e.preventDefault(); setSheet(SHEET_ORDER[Math.min(2, idx + 1)]); }
+    else if (e.key === "ArrowDown") { e.preventDefault(); setSheet(SHEET_ORDER[Math.max(0, idx - 1)]); }
+  });
 
   let drag = null;
   grab.addEventListener("pointerdown", (e) => {
-    if (!phone.matches) return;
+    if (!phone.matches || e.target.closest("button")) return; // the toggle button handles its own taps
     drag = { y0: e.clientY, h0: panel.getBoundingClientRect().height, lastY: e.clientY, lastT: e.timeStamp, v: 0, moved: false };
     panel.classList.remove("animating", "collapsed");
     grab.setPointerCapture(e.pointerId);
@@ -551,12 +564,6 @@
   };
   grab.addEventListener("pointerup", endDrag);
   grab.addEventListener("pointercancel", endDrag);
-  grab.addEventListener("keydown", (e) => {
-    const idx = SHEET_ORDER.indexOf(sheetState);
-    if (e.key === "ArrowUp") { e.preventDefault(); setSheet(SHEET_ORDER[Math.min(2, idx + 1)]); }
-    else if (e.key === "ArrowDown") { e.preventDefault(); setSheet(SHEET_ORDER[Math.max(0, idx - 1)]); }
-    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); sheetToggle(); }
-  });
   phone.addEventListener("change", () => setSheet(sheetState, false));
   window.addEventListener("resize", () => { if (!drag) setSheet(sheetState, false); });
   setSheet(sheetState, false);
@@ -574,7 +581,6 @@
     document.querySelectorAll("[data-i18n-ph]").forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
     document.querySelectorAll("[data-i18n-title]").forEach((el) => { el.title = t(el.dataset.i18nTitle); });
     $("#warnClose").setAttribute("aria-label", t("close"));
-    $("#sheetGrab").setAttribute("aria-label", t("sheet"));
     applyBasemap();
     updatePanelBtn();
     renderMeta();

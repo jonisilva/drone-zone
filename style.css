@@ -70,7 +70,19 @@ body {
   flex-shrink: 0; background: none; border: 0; color: inherit; cursor: pointer;
   font-size: 22px; line-height: 1; padding: 4px 10px; min-width: 40px; min-height: 36px;
 }
-.sheet-grab { display: none; }
+/* Panel top bar: on wide screens just holds the hide button (top right). */
+.sheet-grab { display: flex; justify-content: flex-end; margin: -6px -6px 0 0; }
+.sheet-grab span { display: none; }
+.sheet-btn {
+  width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--bg); color: var(--text); cursor: pointer; padding: 0;
+  display: grid; place-items: center; flex-shrink: 0;
+}
+.sheet-btn svg { width: 18px; height: 18px; }
+.sheet-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Map button to reopen a hidden side panel (wide screens only). */
+.fab.panel-show { display: none; }
+body.panel-hidden .fab.panel-show { display: block; }
 
 .layout { flex: 1; display: flex; min-height: 0; }
 .map-wrap { position: relative; flex: 1; min-width: 0; }
@@ -214,7 +226,9 @@ dialog li { margin-bottom: 6px; }
   }
   .sheet-grab:active { cursor: grabbing; }
   .sheet-grab span { display: block; width: 44px; height: 5px; border-radius: 3px; background: var(--muted); opacity: .5; margin: 0 auto; }
-  .sheet-grab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  /* Toggle sits at the right end of the grab bar, visible even when collapsed. */
+  .sheet-btn { position: absolute; right: 12px; top: 5px; width: 32px; height: 32px; }
+  body.panel-hidden .fab.panel-show { display: none; }
   .check-btn { bottom: 26px; }
   .sub { display: none; }
 }
